@@ -1,0 +1,31 @@
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: node:22
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  needs:
+    - build
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$SERVER_SSH_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+  script:
+    - scp -r dist/* "$SERVER_USER@$SERVER_HOST:/var/www/literary-hundred/dist/"
+    - ssh "$SERVER_USER@$SERVER_HOST" "nginx -t && systemctl reload nginx"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
